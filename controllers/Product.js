@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
+const Order = require('../models/Order');//i forget to import the order model into the routes:fixed
 const Product = require('../models/Product');
 const verifyToken = require('../middleware/verify-token');
 

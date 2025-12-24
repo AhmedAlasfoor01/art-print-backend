@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const OrderSchema = new mongoose.Schema({
   
+  Product:{
+    type:mongoose.Schema.Types.ObjectId,
+    ref:"Product",//refrencing the product into the order model 
+    required:true,
+
+  },
     OrderDate: {
         type: Date,
         required: true,
@@ -15,7 +21,7 @@ const OrderSchema = new mongoose.Schema({
         required: true,
     },
     ProductName: {//so the order will be list the proudts name 
-        type: Number,
+        type: String,
         required: true,
     },
     userId: {
