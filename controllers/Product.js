@@ -18,33 +18,46 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Create a new product with image upload
-router.post('/', upload.single('image'), async (req, res) => {
+// Create a new product with image upload (supports single image + multiple images)
+// Use 'image' field for single image, 'images' field for multiple images
+router.post('/', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 10 }
+]), async (req, res) => {
   try {
     const { ProductName, Category, Price, Size, Quantity } = req.body;
     
-    // Check if image was uploaded
-    if (!req.file) {
-      return res.status(400).json({ error: 'Product image is required' });
+    // Check if at least one image was uploaded
+    if (!req.files || (!req.files['image'] && !req.files['images'])) {
+      return res.status(400).json({ error: 'At least one product image is required' });
     }
 
-    // Extract image data from Cloudinary response
-    const imageData = {
-      url: req.file.path,
-      cloudinary_id: req.file.filename,
-
-    };
-
-    const newProduct = new Product({
+    const productData = {
       userId: req.user._id,
       ProductName,
       Category,
       Price,
       Size,
-      Quantity,
-      image: imageData
-    });
-    
+      Quantity
+    };
+
+    // Handle single image upload (required)
+    if (req.files['image']) {
+      productData.image = {
+        url: req.files['image'][0].path,
+        cloudinary_id: req.files['image'][0].filename,
+      };
+    }
+
+    // Handle multiple images upload (optional)
+    if (req.files['images']) {
+      productData.images = req.files['images'].map(file => ({
+        url: file.path,
+        cloudinary_id: file.filename,
+      }));
+    }
+
+    const newProduct = new Product(productData);
     const saveProduct = await newProduct.save();
     res.json(saveProduct);
   } catch (err) {
@@ -70,8 +83,11 @@ router.get('/:ProductId', async (req, res) => {
   }
 });
 
-// Update product by ID with optional image upload
-router.put('/:productId', upload.single('image'), async (req, res) => {
+// Update product by ID with optional image upload (supports single image + multiple images)
+router.put('/:productId', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 10 }
+]), async (req, res) => {
   try {
     const { ProductName, Category, Price, Size, Quantity } = req.body;
 
@@ -90,8 +106,8 @@ router.put('/:productId', upload.single('image'), async (req, res) => {
       Quantity
     };
 
-    // If a new image is uploaded, delete the old one from Cloudinary and update with new image
-    if (req.file) {
+    // If a new single image is uploaded, delete the old one from Cloudinary and update with new image
+    if (req.files && req.files['image']) {
       // Delete old image from Cloudinary if it exists
       if (product.image && product.image.cloudinary_id) {
         try {
@@ -104,10 +120,19 @@ router.put('/:productId', upload.single('image'), async (req, res) => {
 
       // Add new image data
       updateData.image = {
-        url: req.file.path,
-        cloudinary_id: req.file.filename,
-    
+        url: req.files['image'][0].path,
+        cloudinary_id: req.files['image'][0].filename,
       };
+    }
+
+    // If new multiple images are uploaded, add them to the images array
+    if (req.files && req.files['images']) {
+      const newImages = req.files['images'].map(file => ({
+        url: file.path,
+        cloudinary_id: file.filename,
+      }));
+      // Append new images to existing ones
+      updateData.images = [...(product.images || []), ...newImages];
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -120,6 +145,47 @@ router.put('/:productId', upload.single('image'), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update product' });
+  }
+});
+
+// Delete a specific image from product's images array
+// NOTE: This route must come before /:productId route to avoid route conflicts
+router.delete('/:productId/images/:imageId', async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    if (!product.userId.equals(req.user._id)) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    // Find the image to delete
+    const imageToDelete = product.images.find(
+      img => img.cloudinary_id === req.params.imageId
+    );
+
+    if (!imageToDelete) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    // Delete image from Cloudinary
+    try {
+      await cloudinary.uploader.destroy(imageToDelete.cloudinary_id);
+    } catch (cloudinaryErr) {
+      console.error('Error deleting image from Cloudinary:', cloudinaryErr);
+      // Continue even if deletion fails
+    }
+
+    // Remove image from array
+    product.images = product.images.filter(
+      img => img.cloudinary_id !== req.params.imageId
+    );
+    await product.save();
+
+    res.json({ message: 'Image deleted successfully', product });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete image' });
   }
 });
 
@@ -144,7 +210,8 @@ router.delete('/:productId', async (req, res) => {
     }
 
     // Delete all images from the images array if they exist
-    if (product.images  > 0) {
+    // FIXED: Changed from product.images > 0 to product.images.length > 0
+    if (product.images && product.images.length > 0) {
       try {
         const deletePromises = product.images
           .filter(img => img.cloudinary_id)
@@ -162,7 +229,5 @@ router.delete('/:productId', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
-
-
 
 module.exports = router;
