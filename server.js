@@ -42,7 +42,7 @@ app.use('/test-jwt', testJwtRouter);
 app.use(verifyToken);
 app.use('/user', userCtrl);
 app.use('/Order', orderCtrl);
-app.use('/Product', productCtrl);
+app.use('/product', productCtrl);
 
 
 app.listen(PORT, () => {

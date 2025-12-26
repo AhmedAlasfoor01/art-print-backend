@@ -6,7 +6,8 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'marketplace-listings',
-    allowed_formats: ['jpg', 'jpeg', 'png']
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp']
+
   }
 })
 

@@ -7,146 +7,145 @@ const verifyToken = require('../middleware/verify-token');
 const upload = require('../config/multer');
 const cloudinary = require('../config/cloudinary');
 
-// Get all products for the logged-in user
+
+
 router.get('/', async (req, res) => {
   try {
-    const Products = await Product.find({ userId: req.user._id });
-    res.json(Products);
+    const products = await Product.find({ userId: req.user._id });
+    res.json(products);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
-// Create a new product with image upload (supports single image + multiple images)
-// Use 'image' field for single image, 'images' field for multiple images
-router.post('/', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'images', maxCount: 10 }
-]), async (req, res) => {
-  try {
-    const { ProductName, Category, Price, Size, Quantity } = req.body;
-    
-    // Check if at least one image was uploaded
-    if (!req.files || (!req.files['image'] && !req.files['images'])) {
-      return res.status(400).json({ error: 'At least one product image is required' });
+
+router.post('/', (req, res) => {
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'images', maxCount: 10 },
+  ])(req, res, async (err) => {
+    if (err) {
+      console.error("UPLOAD ERROR:", err);
+      return res.status(400).json({
+        error: err.message || JSON.stringify(err) || "Upload failed"
+      });
     }
 
-    const productData = {
-      userId: req.user._id,
-      ProductName,
-      Category,
-      Price,
-      Size,
-      Quantity
-    };
+    try {
+      const { ProductName, Category, Price, Size, Quantity } = req.body;
 
-    // Handle single image upload (required)
-    if (req.files['image']) {
-      productData.image = {
-        url: req.files['image'][0].path,
-        cloudinary_id: req.files['image'][0].filename,
-      };
-    }
-
-    // Handle multiple images upload (optional)
-    if (req.files['images']) {
-      productData.images = req.files['images'].map(file => ({
-        url: file.path,
-        cloudinary_id: file.filename,
-      }));
-    }
-
-    const newProduct = new Product(productData);
-    const saveProduct = await newProduct.save();
-    res.json(saveProduct);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create product' });
-  }
-});
-
-// Get(select) single product by ID
-router.get('/:ProductId', async (req, res) => {
-  try {
-    const product = await Product.findOne({
-      _id: req.params.ProductId,
-      userId: req.user._id
-    });
-    if (!product) {
-      return res.status(404).json({ error: 'product not found' });
-    }
-    res.json(product);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch product' });
-  }
-});
-
-// Update product by ID with optional image upload (supports single image + multiple images)
-router.put('/:productId', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'images', maxCount: 10 }
-]), async (req, res) => {
-  try {
-    const { ProductName, Category, Price, Size, Quantity } = req.body;
-
-    const product = await Product.findById(req.params.productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-
-    if (!product.userId.equals(req.user._id)) {
-      return res.status(403).json({ error: 'Permission denied' });
-    }
-
-    const updateData = {
-      ProductName,
-      Category,
-      Price,
-      Size,
-      Quantity
-    };
-
-    // If a new single image is uploaded, delete the old one from Cloudinary and update with new image
-    if (req.files && req.files['image']) {
-      // Delete old image from Cloudinary if it exists
-      if (product.image && product.image.cloudinary_id) {
-        try {
-          await cloudinary.uploader.destroy(product.image.cloudinary_id);
-        } catch (cloudinaryErr) {
-          console.error('Error deleting old image from Cloudinary:', cloudinaryErr);
-          // Continue even if deletion fails
-        }
+      if (!ProductName || !Category || !Price || !Size || !Quantity) {
+        return res.status(400).json({
+          error: "Missing required fields: ProductName, Category, Price, Size, Quantity"
+        });
       }
 
-      // Add new image data
-      updateData.image = {
-        url: req.files['image'][0].path,
-        cloudinary_id: req.files['image'][0].filename,
+      if (!req.files || (!req.files['image'] && !req.files['images'])) {
+        return res.status(400).json({ error: 'At least one product image is required' });
+      }
+
+      const productData = {
+        userId: req.user._id,
+        ProductName,
+        Category,
+        Price,
+        Size,
+        Quantity
       };
+
+      if (req.files['image']) {
+        productData.image = {
+          url: req.files['image'][0].path,
+          cloudinary_id: req.files['image'][0].filename,
+        };
+      }
+
+      if (req.files['images']) {
+        productData.images = req.files['images'].map(file => ({
+          url: file.path,
+          cloudinary_id: file.filename,
+        }));
+      }
+
+      const newProduct = new Product(productData);
+      const saved = await newProduct.save();
+
+      res.status(201).json(saved);
+
+    } catch (e) {
+      console.error("CREATE PRODUCT ERROR:", e);
+      res.status(500).json({
+        error: e.message || "Failed to create product"
+      });
     }
-
-    // If new multiple images are uploaded, add them to the images array
-    if (req.files && req.files['images']) {
-      const newImages = req.files['images'].map(file => ({
-        url: file.path,
-        cloudinary_id: file.filename,
-      }));
-      // Append new images to existing ones
-      updateData.images = [...(product.images || []), ...newImages];
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      req.params.productId,
-      updateData,
-      { new: true }
-    );
-
-    res.json(updatedProduct);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update product' });
-  }
+  });
 });
+
+
+// Update product
+router.put('/:productId', (req, res) => {
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'images', maxCount: 10 },
+  ])(req, res, async (err) => {
+    if (err) {
+      console.error("UPLOAD ERROR:", err);
+      return res.status(400).json({
+        error: err.message || JSON.stringify(err) || "Upload failed"
+      });
+    }
+
+    try {
+      const { ProductName, Category, Price, Size, Quantity } = req.body;
+
+      const product = await Product.findById(req.params.productId);
+      if (!product) return res.status(404).json({ error: 'Product not found' });
+
+      if (!product.userId.equals(req.user._id)) {
+        return res.status(403).json({ error: 'Permission denied' });
+      }
+
+      const updateData = { ProductName, Category, Price, Size, Quantity };
+
+      if (req.files && req.files['image']) {
+        if (product.image && product.image.cloudinary_id) {
+          try {
+            await cloudinary.uploader.destroy(product.image.cloudinary_id);
+          } catch (cloudinaryErr) {
+            console.error('Error deleting old image:', cloudinaryErr);
+          }
+        }
+
+        updateData.image = {
+          url: req.files['image'][0].path,
+          cloudinary_id: req.files['image'][0].filename,
+        };
+      }
+
+      if (req.files && req.files['images']) {
+        const newImages = req.files['images'].map(file => ({
+          url: file.path,
+          cloudinary_id: file.filename,
+        }));
+        updateData.images = [...(product.images || []), ...newImages];
+      }
+
+      const updated = await Product.findByIdAndUpdate(
+        req.params.productId,
+        updateData,
+        { new: true }
+      );
+
+      res.json(updated);
+
+    } catch (e) {
+      console.error("UPDATE PRODUCT ERROR:", e);
+      res.status(500).json({ error: e.message || "Failed to update product" });
+    }
+  });
+});
+
 
 // Delete a specific image from product's images array
 // NOTE: This route must come before /:productId route to avoid route conflicts
