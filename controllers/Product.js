@@ -67,6 +67,11 @@ router.post('/', (req, res) => {
           cloudinary_id: file.filename,
         }));
       }
+      
+    if (!productData.image && productData.images && productData.images.length > 0) {
+      productData.image = productData.images[0];
+}
+
 
       const newProduct = new Product(productData);
       const saved = await newProduct.save();
@@ -148,7 +153,7 @@ router.put('/:productId', (req, res) => {
 
 
 // Delete a specific image from product's images array
-// NOTE: This route must come before /:productId route to avoid route conflicts
+
 router.delete('/:productId/images/:imageId', async (req, res) => {
   try {
     const product = await Product.findById(req.params.productId);
@@ -172,7 +177,7 @@ router.delete('/:productId/images/:imageId', async (req, res) => {
       await cloudinary.uploader.destroy(imageToDelete.cloudinary_id);
     } catch (cloudinaryErr) {
       console.error('Error deleting image from Cloudinary:', cloudinaryErr);
-      // Continue even if deletion fails
+      
     }
 
     // Remove image from array
@@ -198,18 +203,18 @@ router.delete('/:productId', async (req, res) => {
       return res.status(403).json({ error: 'Permission denied' });
     }
 
-    // Delete image from Cloudinary if it exists
+    
     if (product.image && product.image.cloudinary_id) {
       try {
         await cloudinary.uploader.destroy(product.image.cloudinary_id);
       } catch (cloudinaryErr) {
         console.error('Error deleting image from Cloudinary:', cloudinaryErr);
-        // Continue with product deletion even if image deletion fails
+       
       }
     }
 
     // Delete all images from the images array if they exist
-    // FIXED: Changed from product.images > 0 to product.images.length > 0
+    
     if (product.images && product.images.length > 0) {
       try {
         const deletePromises = product.images

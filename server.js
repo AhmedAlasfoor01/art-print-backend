@@ -17,10 +17,15 @@ const authCtrl = require('./controllers/auth.js');
 const userCtrl = require('./controllers/user.js');
 const productCtrl = require('./controllers/Product.js');
 const orderCtrl = require('./controllers/Order.js');
+const cloudinaryCtrl = require("./controllers/cloudinary");
 
 
 // MiddleWare
 const verifyToken = require('./middleware/verify-token');
+
+
+
+
 
 mongoose.connect(process.env.MONGODB_URI);
 
@@ -43,6 +48,7 @@ app.use(verifyToken);
 app.use('/user', userCtrl);
 app.use('/Order', orderCtrl);
 app.use('/product', productCtrl);
+app.use("/cloudinary", cloudinaryCtrl);
 
 
 app.listen(PORT, () => {
